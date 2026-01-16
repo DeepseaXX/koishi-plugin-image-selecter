@@ -27,6 +27,7 @@ export interface Config {
   admins: { userId: string; sizeLimit: number }[]
   allowNormalUserUpload: boolean
   normalUserSizeLimit: number
+  maxout: number
 }
 
 export const Config: Schema<Config> =
@@ -39,6 +40,7 @@ export const Config: Schema<Config> =
     }).description('存图功能'),
     Schema.object({
       imagePath: Schema.string().required().description('图片库路径').role('textarea', { rows: [2, 4] }),
+      maxout: Schema.number().default(5).description('一次最大输出图片数量'),
       filenameTemplate: Schema.string().role('textarea', { rows: [2, 4] })
         .default("${date}-${time}-${index}-${guildId}-${userId}${ext}").description('文件名模板，支持变量: ${userId}, ${username}, ${timestamp}, ${date}, ${time}, ${index}, ${ext}, ${guildId}, ${channelId}'),
     }).description('发图功能'),
@@ -370,56 +372,106 @@ export function apply(ctx: Context, config: Config) {
 
     try {
       const folders = await fs.readdir(config.imagePath, { withFileTypes: true })
-      const matchedFolders = []
 
-      // 收集所有匹配的文件夹
+      // 寻找所有可能的匹配（input以别名开头）
+      const possibleMatches = []
+
       for (const folder of folders) {
         if (!folder.isDirectory()) continue
 
         const folderName = folder.name
         const aliases = folderName.split('-')
 
-        if (aliases.includes(input)) {
-          matchedFolders.push(folderName)
+        for (const alias of aliases) {
+          if (input.startsWith(alias)) {
+            const suffix = input.slice(alias.length).trim()
+            possibleMatches.push({
+              folderName,
+              alias,
+              suffix,
+              aliasLength: alias.length
+            })
+          }
         }
       }
 
-      if (matchedFolders.length === 0) {
+      if (possibleMatches.length === 0) {
         return next()
       }
 
-      loginfo('匹配到的文件夹:', matchedFolders)
+      // 按别名长度降序排序，取最长匹配
+      possibleMatches.sort((a, b) => b.aliasLength - a.aliasLength)
+      const bestMatch = possibleMatches[0]
 
-      // 检测别名重名并输出警告
-      if (matchedFolders.length > 1) {
-        ctx.logger.warn(`检测到别名重名: 输入"${input}"匹配到${matchedFolders.length}个文件夹: ${matchedFolders.join(', ')}`)
+      // 收集所有具有相同最长别名的匹配（可能有多个文件夹使用相同别名）
+      const bestMatches = possibleMatches.filter(m => m.aliasLength === bestMatch.aliasLength && m.alias === bestMatch.alias)
+
+      // 随机选择一个文件夹
+      const selectedMatch = bestMatches[Math.floor(Math.random() * bestMatches.length)]
+
+      const { folderName, suffix } = selectedMatch
+
+      loginfo('匹配结果:', { folderName, alias: selectedMatch.alias, suffix })
+      if (bestMatches.length > 1) {
+        ctx.logger.warn(`检测到别名重名: "${selectedMatch.alias}" 匹配到 ${bestMatches.length} 个文件夹: ${bestMatches.map(m => m.folderName).join(', ')}`)
       }
 
-      // 随机选择一个匹配的文件夹
-      const selectedFolder = matchedFolders[Math.floor(Math.random() * matchedFolders.length)]
-      loginfo('随机选择文件夹:', selectedFolder)
+      // 解析数量
+      let count = 1
+      if (suffix) {
+        const parsed = parseInt(suffix, 10)
+        if (!isNaN(parsed) && parsed > 0 && String(parsed) === suffix) {
+          count = parsed
+        } else {
+          // 尝试处理 "5" 这种纯数字或者 " 5"
+          // 如果 suffix 不是纯数字（允许负号但不处理），则 count 维持 1
+          // 只有当 input = alias + space + number 或 input = alias + number 时才尝试。
+          // 但上面的 logic 是 trim() 过的。
+          // 如果 suffix 是 "abc"，parseInt("abc") -> NaN.
+          // 如果 suffix 是 "100abc", parseInt -> 100.
+          // 需求说 "有任何非整数...只发送一张"。所以 "100abc" 应该发送 1 张。
+          // 所以我们应该严格检查 suffix 是否为数字。
+          if (/^\d+$/.test(suffix)) {
+            count = Math.min(parseInt(suffix, 10), config.maxout)
+          } else {
+            count = 1
+          }
+        }
+      }
 
-      const folderPath = join(config.imagePath, selectedFolder)
+      // 只有在确定是纯数字时才应用 limit
+      if (count > config.maxout) {
+        count = config.maxout
+      }
+
+      loginfo(`请求图片数量: ${count} (Max: ${config.maxout})`)
+
+      const folderPath = join(config.imagePath, folderName)
       const files = await fs.readdir(folderPath)
       const mediaFiles = files.filter(file =>
         /\.(jpe?g|png|gif|webp|mp4|mov|avi|bmp|tiff?)$/i.test(file)
       )
+
       if (mediaFiles.length === 0) {
         return '该文件夹暂无图片或视频'
       }
 
-      // 从选定的文件夹中随机选择一个文件
-      const randomFile = mediaFiles[Math.floor(Math.random() * mediaFiles.length)]
-      const filePath = join(folderPath, randomFile)
+      // 循环发送图片
+      for (let i = 0; i < count; i++) {
+        const randomFile = mediaFiles[Math.floor(Math.random() * mediaFiles.length)]
+        const filePath = join(folderPath, randomFile)
 
-      loginfo('随机选择文件:', randomFile)
+        loginfo(`发送文件 ${i + 1}/${count}:`, randomFile)
 
-      const isVideo = /\.(mp4|mov|avi)$/i.test(randomFile)
-      const element = isVideo
-        ? h.video(filePath)
-        : h.image(filePath)
+        const isVideo = /\.(mp4|mov|avi)$/i.test(randomFile)
+        const element = isVideo
+          ? h.video(filePath)
+          : h.image(filePath)
 
-      await session.send(element)
+        await session.send(element)
+        // 稍微延迟一下？不，session.send是异步的但这里await了，所以是顺序发送。
+      }
+
       return next()
     } catch (error) {
       loginfo('发图失败:', error)
