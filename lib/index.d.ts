@@ -10,6 +10,7 @@ export interface Config {
     promptTimeout: number;
     filenameTemplate: string;
     saveCommandName: string;
+    saveFailFallback: boolean;
     listCommandName: string;
     admins: {
         userId: string;
