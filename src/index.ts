@@ -22,6 +22,7 @@ export interface Config {
   promptTimeout: number
   filenameTemplate: string
   saveCommandName: string
+  saveFailFallback: boolean
   listCommandName: string
   admins: { userId: string; sizeLimit: number }[]
   allowNormalUserUpload: boolean
@@ -41,6 +42,7 @@ export const Config: Schema<Config> =
     }).description('发图功能'),
     Schema.object({
       saveCommandName: Schema.string().default('存图').description('存图指令名称'),
+      saveFailFallback: Schema.boolean().default(true).description('匹配关键词失败时是否保存到临时目录（关闭则直接取消保存）'),
       tempPath: Schema.string().required().description('临时存储路径').role('textarea', { rows: [2, 4] }),
       promptTimeout: Schema.number().default(30).description('等待用户发送图片的超时时间 (秒)'),
       filenameTemplate: Schema.string().role('textarea', { rows: [2, 4] })
@@ -245,6 +247,9 @@ export function apply(ctx: Context, config: Config) {
             matched = true
             loginfo('在图片库匹配到文件夹:', folderName)
           } else {
+            if (!config.saveFailFallback) {
+              return `关键词 "${keyword}" 匹配失败，已取消保存`
+            }
             loginfo(`关键词 "${keyword}" 未在图片库找到匹配文件夹，将保存到临时目录`)
           }
         }
