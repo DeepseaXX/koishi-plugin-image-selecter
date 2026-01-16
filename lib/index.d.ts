@@ -11,6 +11,7 @@ export interface Config {
     filenameTemplate: string;
     debugMode: boolean;
     saveCommandName: string;
+    listCommandName: string;
     admins: {
         userId: string;
         sizeLimit: number;

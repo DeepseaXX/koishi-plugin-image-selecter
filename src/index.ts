@@ -23,6 +23,7 @@ export interface Config {
   filenameTemplate: string
   debugMode: boolean
   saveCommandName: string
+  listCommandName: string
   admins: { userId: string; sizeLimit: number }[]
   allowNormalUserUpload: boolean
   normalUserSizeLimit: number
@@ -32,6 +33,7 @@ export const Config: Schema<Config> =
   Schema.intersect([
     Schema.object({
       saveCommandName: Schema.string().default('存图').description('存图指令名称'),
+      listCommandName: Schema.string().default('图库列表').description('图库列表指令名称'),
       tempPath: Schema.string().required().description('临时存储路径').role('textarea', { rows: [2, 4] }),
       promptTimeout: Schema.number().default(30).description('等待用户发送图片的超时时间 (秒)'),
     }).description('存图功能'),
@@ -303,6 +305,53 @@ export function apply(ctx: Context, config: Config) {
         }
       } catch (error) {
         return `保存失败: ${error.message}`
+      }
+
+    })
+
+  // 图库列表指令
+  ctx.command(config.listCommandName)
+    .action(async ({ session }) => {
+      try {
+        const folders = await fs.readdir(config.imagePath, { withFileTypes: true })
+        let messageLines = []
+
+        // 收集并格式化文件夹信息
+        let firstExample: { main: string; alias: string; found?: boolean } = { main: '猪图', alias: 'pig' }
+        let hasFolders = false
+
+        for (const folder of folders) {
+          if (!folder.isDirectory()) continue
+
+          hasFolders = true
+          const folderName = folder.name
+          const parts = folderName.split('-')
+          const mainName = parts[0]
+          const aliases = parts.slice(1)
+
+          // 更新示例（使用第一个找到的有效文件夹）
+          if (!firstExample.found && aliases.length > 0) {
+            firstExample = { main: mainName, alias: aliases[0], found: true }
+          } else if (!firstExample.found) {
+            firstExample = { main: mainName, alias: mainName, found: true }
+          }
+
+          if (aliases.length > 0) {
+            messageLines.push(`${mainName} 别名：${aliases.join(', ')}`)
+          } else {
+            messageLines.push(`${mainName}`)
+          }
+        }
+
+        if (!hasFolders) {
+          return '图库为空'
+        }
+
+        const header = `发送指令【${firstExample.main}】或别名【${firstExample.alias}】 随机返回图片`
+        return [header, ...messageLines].join('\n')
+
+      } catch (error) {
+        return `获取列表失败: ${error.message}`
       }
     })
 
