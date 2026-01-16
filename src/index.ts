@@ -11,7 +11,7 @@ export const inject = {
 export const usage = `
 ---
 
-<a target="_blank" href="https://www.npmjs.com/package/koishi-plugin-image-selecter">➤ 食用方法点此获取</a>
+<a target="_blank" href="https://www.npmjs.com/package/@deepseaxx/koishi-plugin-image-selector">➤ 食用方法点此获取</a>
 
 ---
 `;
