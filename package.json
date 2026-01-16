@@ -1,7 +1,9 @@
 {
-  "name": "@deepseaxx/koishi-plugin-image-selecter",
+  "name": "@deepseaxx/koishi-plugin-image-selector",
   "description": "A powerful Koishi plugin for random image/video sending and user image storage with alias system support",
-  "version": "0.2.0",
+  "preview": true,
+  "hidden": true,
+  "version": "0.3.5",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -9,9 +11,9 @@
     "src"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/DeepseaXX/koishi-plugin-image-selecter",
+  "homepage": "https://github.com/DeepseaXX/koishi-plugin-image-selector",
   "bugs": {
-    "url": "https://github.com/DeepseaXX/koishi-plugin-image-selecter/issues"
+    "url": "https://github.com/DeepseaXX/koishi-plugin-image-selector/issues"
   },
   "koishi": {
     "browser": true,
@@ -29,9 +31,10 @@
     "storage",
     "media",
     "upload",
+    "video",
     "gallery"
   ],
   "peerDependencies": {
-    "koishi": "^4.18.7"
+    "koishi": "^4.18.10"
   }
 }
