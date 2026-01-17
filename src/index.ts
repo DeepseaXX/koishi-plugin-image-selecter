@@ -26,6 +26,7 @@ export interface Config {
   listCommandName: string
 
   userLimits: { userId: string; sizeLimit: number }[]
+  groupLimits: { guildId: string; sizeLimit: number }[]
   maxout: number
   debugMode: boolean
 }
@@ -54,6 +55,12 @@ export const Config: Schema<Config> =
       })).role('table')
         .description('用户上传限制列表 (MB)。必须包含 userId 为 "default" 的项作为默认限制。设置为 0 或非法值代表禁止上传。')
         .default([{ userId: 'default', sizeLimit: 0 }]),
+      groupLimits: Schema.array(Schema.object({
+        guildId: Schema.string().required().description('群组ID'),
+        sizeLimit: Schema.number().min(0).step(0.1).required().description('上传尺寸限制(MB)'),
+      })).role('table')
+        .description('群组上传限制列表 (MB)。可包含 guildId 为 "default" 的项作为默认限制。')
+        .default([{ guildId: 'default', sizeLimit: 0 }]),
     }).description('权限设置'),
     Schema.object({
       debugMode: Schema.boolean().default(false).description('启用调试日志模式').experimental(),
@@ -204,26 +211,53 @@ export function apply(ctx: Context, config: Config) {
 
       // 检查权限和尺寸限制
       const userId = session.userId
-      let limits = config.userLimits || []
+      const guildId = session.guildId
+      const userLimits = config.userLimits || []
+      const groupLimits = config.groupLimits || []
 
       // 将数组转换为字典以便快速查找
-      const limitsDict: Record<string, number> = {}
-      if (Array.isArray(limits)) {
-        for (const item of limits) {
+      const userLimitsDict: Record<string, number> = {}
+      if (Array.isArray(userLimits)) {
+        for (const item of userLimits) {
           if (item && item.userId !== undefined && item.sizeLimit !== undefined) {
-            limitsDict[item.userId] = item.sizeLimit
+            userLimitsDict[item.userId] = item.sizeLimit
           }
         }
       }
 
-      // 查找顺序: 用户ID -> default -> 0
-      let limit = limitsDict[userId]
-
-      if (limit === undefined || limit === null) {
-        limit = limitsDict['default']
+      const groupLimitsDict: Record<string, number> = {}
+      if (Array.isArray(groupLimits)) {
+        for (const item of groupLimits) {
+          if (item && item.guildId !== undefined && item.sizeLimit !== undefined) {
+            groupLimitsDict[item.guildId] = item.sizeLimit
+          }
+        }
       }
 
-      // 如果 default 也不存在，或者值为 undefined/null，则默认为 0
+      // 查找顺序: 用户独立设置 -> 群组独立设置 -> 群组默认设置 -> 全局默认设置(用户default) -> 0
+      let limit: number | undefined
+
+      // 1. 具体用户
+      if (userLimitsDict[userId] !== undefined) {
+        limit = userLimitsDict[userId]
+      }
+
+      // 2. 具体群组
+      if (limit === undefined && guildId && groupLimitsDict[guildId] !== undefined) {
+        limit = groupLimitsDict[guildId]
+      }
+
+      // 3. 群组默认
+      if (limit === undefined && guildId && groupLimitsDict['default'] !== undefined) {
+        limit = groupLimitsDict['default']
+      }
+
+      // 4. 全局默认 (fallback to user default)
+      if (limit === undefined) {
+        limit = userLimitsDict['default']
+      }
+
+      // 5. 最终兜底
       if (limit === undefined || limit === null) {
         limit = 0
       }
