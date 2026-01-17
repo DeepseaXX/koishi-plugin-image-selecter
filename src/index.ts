@@ -49,7 +49,10 @@ export const Config: Schema<Config> =
     }).description('存图功能'),
     Schema.object({
       userLimits: Schema.dict(Schema.number().min(0).step(0.1))
-        .role('table')
+        .role('table', {
+          keys: { label: '用户ID' },
+          values: { label: '上传尺寸限制(MB)' },
+        })
         .description('用户上传限制列表 (MB)。键填写用户ID，值填写限制大小。必须包含键为 "default" 的项作为默认限制。设置为 0 或非法值代表禁止上传。')
         .default({ default: 0 }),
     }).description('权限设置'),
