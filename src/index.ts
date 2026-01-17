@@ -152,6 +152,14 @@ export function apply(ctx: Context, config: Config) {
 
   // 存图指令
   ctx.command(`${config.saveCommandName} [关键词] [...图片]`, { captureQuote: false })
+    .usage(`存图方式：
+1. 直接存图：${config.saveCommandName} 关键词 [图片]
+2. 交互式：发送 ${config.saveCommandName} 后按提示操作
+3. 引用存图：回复图片消息并发送 ${config.saveCommandName} [关键词]
+
+关于“关键词”：
+关键词即文件夹名称或其别名。系统自动匹配文件夹，文件夹名格式为“主名-别名1-别名2”。
+例如文件夹名为“猫图-mt”，则发送“猫图”或“mt”均可匹配到该文件夹并存入图片。若关键词不存在，则根据配置创建新文件夹或存入临时目录。`)
     .userFields(['id', 'name', 'authority'])
     .action(async ({ session }, keyword, ...图片) => {
       // 预处理：检查第一参数是否为图片
@@ -376,6 +384,7 @@ export function apply(ctx: Context, config: Config) {
 
   // 图库列表指令
   ctx.command(config.listCommandName)
+    .usage('查看当前所有可用的图库关键词及别名列表。')
     .action(async ({ session }) => {
       try {
         const folders = await fs.readdir(config.imagePath, { withFileTypes: true })
