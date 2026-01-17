@@ -25,7 +25,7 @@ export interface Config {
   saveFailFallback: boolean
   listCommandName: string
 
-  userLimits: Record<string, number>
+  userLimits: { userId: string; sizeLimit: number }[]
   maxout: number
   debugMode: boolean
 }
@@ -48,13 +48,12 @@ export const Config: Schema<Config> =
       saveFailFallback: Schema.boolean().default(true).description('匹配关键词失败时是否保存到临时目录（关闭则直接取消保存）'),
     }).description('存图功能'),
     Schema.object({
-      userLimits: Schema.dict(Schema.number().min(0).step(0.1))
-        .role('table', {
-          keys: { label: '用户ID' },
-          values: { label: '上传尺寸限制(MB)' },
-        })
-        .description('用户上传限制列表 (MB)。键填写用户ID，值填写限制大小。必须包含键为 "default" 的项作为默认限制。设置为 0 或非法值代表禁止上传。')
-        .default({ default: 0 }),
+      userLimits: Schema.array(Schema.object({
+        userId: Schema.string().required().description('用户ID'),
+        sizeLimit: Schema.number().min(0).step(0.1).required().description('上传尺寸限制(MB)'),
+      })).role('table')
+        .description('用户上传限制列表 (MB)。必须包含 userId 为 "default" 的项作为默认限制。设置为 0 或非法值代表禁止上传。')
+        .default([{ userId: 'default', sizeLimit: 0 }]),
     }).description('权限设置'),
     Schema.object({
       debugMode: Schema.boolean().default(false).description('启用调试日志模式').experimental(),
@@ -203,18 +202,25 @@ export function apply(ctx: Context, config: Config) {
         keyword = reply.trim()
       }
 
-
-
-      // 检查权限和尺寸限制
       // 检查权限和尺寸限制
       const userId = session.userId
-      const limits = config.userLimits || {}
+      let limits = config.userLimits || []
+
+      // 将数组转换为字典以便快速查找
+      const limitsDict: Record<string, number> = {}
+      if (Array.isArray(limits)) {
+        for (const item of limits) {
+          if (item && item.userId !== undefined && item.sizeLimit !== undefined) {
+            limitsDict[item.userId] = item.sizeLimit
+          }
+        }
+      }
 
       // 查找顺序: 用户ID -> default -> 0
-      let limit = limits[userId]
+      let limit = limitsDict[userId]
 
       if (limit === undefined || limit === null) {
-        limit = limits['default']
+        limit = limitsDict['default']
       }
 
       // 如果 default 也不存在，或者值为 undefined/null，则默认为 0
