@@ -393,7 +393,6 @@ export function apply(ctx: Context, config: Config) {
         let messageLines = []
 
         // 收集并格式化文件夹信息
-        let firstExample: { main: string; alias: string; found?: boolean } = { main: '猪图', alias: 'pig' }
         let hasFolders = false
 
         for (const folder of folders) {
